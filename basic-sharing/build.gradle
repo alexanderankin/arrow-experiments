@@ -1,0 +1,8 @@
+plugins {
+    id 'arrow-experiments-conventions'
+}
+
+dependencies {
+    implementation group: 'org.apache.arrow', name: 'arrow-vector', version: property('arrowVersion')
+    implementation group: 'org.apache.arrow', name: 'arrow-memory-netty', version: property('arrowVersion')
+}
