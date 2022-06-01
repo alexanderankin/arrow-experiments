@@ -1,5 +1,6 @@
 package org.example.arrow.sharing.basic;
 
+import com.google.common.collect.Iterables;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.arrow.flight.*;
@@ -18,8 +19,8 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -34,14 +35,14 @@ public class Flight {
             try (FlightServer flightServer = FlightServer.builder(allocator, location, new CookbookProducer(allocator, location)).build()) {
                 try {
                     flightServer.start();
-                    System.out.println("S1: Server (Location): Listening on port " + flightServer.getPort());
+                    log.info("S1: Server (Location): Listening on port " + flightServer.getPort());
                 } catch (IOException e) {
                     System.exit(1);
                 }
 
                 // Client
                 try (FlightClient flightClient = FlightClient.builder(allocator, location).build()) {
-                    System.out.println("C1: Client (Location): Connected to " + location.getUri());
+                    log.info("C1: Client (Location): Connected to {}", location.getUri());
 
                     // Populate data
                     Schema schema = new Schema(List.of(new Field("name", NULLABLE_STRING, null)));
@@ -63,55 +64,57 @@ public class Flight {
                         listener.putNext();
                         listener.completed();
                         listener.getResult();
-                        System.out.println("C2: Client (Populate Data): Wrote 2 batches with 3 rows each");
+                        log.info("C2: Client (Populate Data): Wrote 2 batches with 3 rows each");
                     }
 
                     // Get metadata information
                     FlightInfo flightInfo = flightClient.getInfo(FlightDescriptor.path("profiles"));
-                    System.out.println("C3: Client (Get Metadata): " + flightInfo);
+                    log.info("C3: Client (Get Metadata): {}", flightInfo);
 
                     // Get data information
-                    try (FlightStream flightStream = flightClient.getStream(new Ticket(
-                            bytes(FlightDescriptor.path("profiles").getPath().get(0))))) {
+                    Ticket t = new Ticket(bytes(FlightDescriptor.path("profiles").getPath().get(0)));
+                    try (FlightStream flightStream = flightClient.getStream(t)) {
                         int batch = 0;
                         try (VectorSchemaRoot vectorSchemaRootReceived = flightStream.getRoot()) {
-                            System.out.println("C4: Client (Get Stream):");
+                            log.info("C4: Client (Get Stream):");
                             while (flightStream.next()) {
                                 batch++;
-                                System.out.println("Client Received batch #" + batch + ", Data:");
-                                System.out.print(vectorSchemaRootReceived.contentToTSVString());
+                                String tsv = vectorSchemaRootReceived.contentToTSVString();
+                                log.info("Client Received batch #{}, Data: {}", batch, tsv);
                             }
                         }
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        log.error("Exception", e);
                     }
 
                     // Get all metadata information
-                    Iterable<FlightInfo> flightInfosBefore = flightClient.listFlights(Criteria.ALL);
-                    System.out.print("C5: Client (List Flights Info): ");
-                    flightInfosBefore.forEach(t -> System.out.println(t));
+                    List<FlightInfo> flightInfosBefore = toList(flightClient.listFlights(Criteria.ALL), FlightInfo.class);
+                    log.info("C5: Client (List Flights Info): {}", flightInfosBefore);
 
                     // Do delete action
-                    Iterator<Result> deleteActionResult = flightClient.doAction(new Action("DELETE",
-                            bytes(FlightDescriptor.path("profiles").getPath().get(0))));
-                    while (deleteActionResult.hasNext()) {
-                        Result result = deleteActionResult.next();
-                        System.out.println("C6: Client (Do Delete Action): " + string(result.getBody()));
-                    }
+                    Action a = new Action("DELETE", bytes(FlightDescriptor.path("profiles").getPath().get(0)));
+                    List<Result> deleteActionResult = toList(() -> flightClient.doAction(a), Result.class);
+
+                    for (Result result : deleteActionResult)
+                        log.info("C6: Client (Do Delete Action): {}", string(result.getBody()));
 
                     // Get all metadata information (to validate delete action)
-                    Iterable<FlightInfo> flightInfos = flightClient.listFlights(Criteria.ALL);
-                    flightInfos.forEach(t -> System.out.println(t));
-                    System.out.println("C7: Client (List Flights Info): After delete - No records");
+                    List<FlightInfo> flightInfos = toList(flightClient.listFlights(Criteria.ALL), FlightInfo.class);
+                    log.info("flightInfos: {}", flightInfos);
+                    log.info("C7: Client (List Flights Info): After delete - No records");
 
                     // Server shut down
                     flightServer.shutdown();
-                    System.out.println("C8: Server shut down successfully");
+                    log.info("C8: Server shut down successfully");
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                log.error("interrupted", e);
             }
         }
+    }
+
+    private static <T> List<T> toList(Iterable<T> iterable, Class<T> tClass) {
+        return Arrays.asList(Iterables.toArray(iterable, tClass));
     }
 
     @Value
