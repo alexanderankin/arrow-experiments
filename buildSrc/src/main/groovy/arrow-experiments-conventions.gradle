@@ -12,13 +12,12 @@ dependencies {
     testCompileOnly 'org.projectlombok:lombok:1.18.24'
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.24'
 
-    implementation 'ch.qos.logback:logback-classic:1.2.10'
+    implementation 'org.slf4j:slf4j-simple:2.0.0-alpha7'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
 
     testImplementation 'org.hamcrest:hamcrest:2.2'
     testImplementation 'org.mockito:mockito-core:3+'
-    testImplementation 'ch.qos.logback:logback-classic:1.2.10'
     testImplementation 'com.fasterxml.uuid:java-uuid-generator:4.0.1'
 }
 
@@ -28,4 +27,5 @@ tasks.withType(Test).configureEach {
 
 tasks.withType(JavaExec).configureEach {
     jvmArgs += ['--add-opens', 'java.base/java.nio=ALL-UNNAMED']
+    jvmArgs += ['-Dorg.slf4j.simpleLogger.defaultLogLevel=info']
 }
